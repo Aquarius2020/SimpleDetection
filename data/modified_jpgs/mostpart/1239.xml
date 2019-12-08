@@ -1,0 +1,26 @@
+<annotation>
+    <folder>../resources/modified_images</folder>
+    <filename>1239.bmp</filename>
+    <path>../resources/modified_images/1239.bmp</path>
+    <source>
+        <database>Unknown</database>
+    </source>
+    <size>
+        <width>320</width>
+        <height>1920</height>
+        <depth>3</depth>
+    </size>
+    <segmented>0</segmented>
+    <object>
+        <name>keyPoint_2</name>
+        <pose>Unspecified</pose>
+        <truncated>0</truncated>
+        <difficult>0</difficult>
+        <bndbox>
+            <xmin>97</xmin>
+            <xmax>127</xmax>
+            <ymin>1178</ymin>
+            <ymax>1208</ymax>
+        </bndbox>
+    </object>
+</annotation>
