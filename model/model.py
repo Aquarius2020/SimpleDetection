@@ -30,37 +30,35 @@ class BasicConv(nn.Module):
 class Backbone(nn.Module):
     def __init__(self):
         super(Backbone, self).__init__()
-        self.conv1 = BasicConv(3, 8, kernel_size=3, stride=2,
-                               relu=False)  # False?
+        self.conv1_1 = BasicConv(3, 8, kernel_size=3, stride=2, relu=False)
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv2 = BasicConv(8, 16, kernel_size=3, stride=2)
-        self.pool2 = nn.MaxPool2d(2, 2)
-        self.conv3 = BasicConv(16, 32, kernel_size=2, stride=2)
+        self.conv2_1 = BasicConv(8, 16, kernel_size=3, stride=2)
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv3_1 = BasicConv(16, 32, kernel_size=3, stride=2)
 
     def forward(self, x):
-        x = self.conv1(x)
+        x = self.conv1_1(x)
         x = self.pool1(x)
-        x = self.conv2(x)
+        x = self.conv2_1(x)
         x = self.pool2(x)
-        x = self.conv3(x)
-
+        x = self.conv3_1(x)
         return x
 
-class Net(nn.Module):
-    def __init__(self, num_classes=3):
-        super(Net, self).__init__()
-        self.num_classes = num_classes
-        self.backbone = Backbone()
 
-        self.prediction_conv = nn.Conv2d(32, 2+num_classes, kernel_size=3,padding=1)
+class Net(nn.Module):
+    def __init__(self, class_quantity=3):
+        super(Net, self).__init__()
+        self.class_quantity = class_quantity
+        self.backbone = Backbone()
+        self.prediction_conv = nn.Conv2d(32,
+                                         2 + class_quantity,
+                                         kernel_size=3,
+                                         padding=1)
         self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
         x = self.backbone(x)
-        # bs, c, w, h
         x = self.prediction_conv(x)
-        # bs, w, h, c
         x = x.permute(0, 2, 3, 1)
-        # bs, w*h , c
         x = x.reshape(x.size(0), -1, x.size(-1))
         return x

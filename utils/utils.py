@@ -2,15 +2,27 @@ import os
 import random
 import sys
 from xml.etree import ElementTree as ET
-import torch
+from tqdm import tqdm
+
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from torch.utils.data import DataLoader, Dataset
+from sklearn.model_selection import train_test_split
 
 main_path = os.path.dirname(os.path.join(os.getcwd(), ".."))
 sys.path.append(main_path)
 
 from config import cfg
+
+
+def get_filePath_list(dirPath):
+    all_filePath_list = [
+        os.path.join(dirPath, item) for item in os.listdir(dirPath)
+    ]
+    return all_filePath_list
+
 
 def get_device(force_cpu=False):
     cuda = False if force_cpu else torch.cuda.is_available()
@@ -20,8 +32,8 @@ def get_device(force_cpu=False):
         print("Using CUDA")
     else:
         print("Using CPU")
-
     return device
+
 
 def set_seed(seed=1):
     random.seed(seed)
@@ -79,52 +91,76 @@ def print_flush(str):
     sys.stdout.flush()
 
 
-def get_filePath_list(dirPath):
-    all_filePath_list = [
-        os.path.join(dirPath, item) for item in os.listdir(dirPath)
-    ]
-    return all_filePath_list
-
-
 def get_all_samples(dirPath):
-    image_4dArray = None
+    print("begin to get all samples")
     label_list = []
 
     all_filePath_list = get_filePath_list(dirPath)
-    for item in all_filePath_list:
-        img_list, label = get_sample_image_bbox_classId(item)
-        img = img_list[np.newaxis, :]
-        if image_4dArray is None:
-            image_4dArray = img
-        else:
-            image_4dArray = np.concatenate((image_4dArray, img))
+    num_list = len(all_filePath_list)
+
+    all_images_4dArray = np.zeros((num_list, 1920, 320, 3), dtype='uint8')
+
+    pbar = tqdm(total=num_list)
+    for i, item in enumerate(all_filePath_list):
+        pbar.update(1)
+        img_3dArray, label = get_sample_image_bbox_classId(item)
+        all_images_4dArray[i] = img_3dArray
         label_list.append(label)
-    return image_4dArray, label_list
+    print("get all samples finished")
+    return all_images_4dArray, label_list
 
 
 class trainDataSet(Dataset):
-    def __init__(self, dirPath, transforms=None):
+    def __init__(self,
+                 dirPath,
+                 allimages_list,
+                 alllabel_list,
+                 trainIndex,
+                 transforms=None):
         super(trainDataSet, self).__init__()
-        allimages_list, alllabel_list = get_all_samples(dirPath)
-        self.allimages_list = allimages_list
-        self.alllabel_list = alllabel_list
+        self.train_images_list = np.array(allimages_list)[trainIndex]
+        self.train_label_list = np.array(alllabel_list)[trainIndex]
         self.transforms = transforms
 
     def __len__(self):
-        return len(self.alllabel_list)
+        return len(self.train_label_list)
 
     def __getitem__(self, index):
-        image = self.allimages_list[index]
-        label = self.alllabel_list[index]
+        image = self.train_images_list[index]
+        label = self.train_label_list[index]
         if self.transforms is not None:
             image = self.transforms(image)
         return image, label
+
+
+class testDataSet(Dataset):
+    def __init__(self,
+                 dirPath,
+                 allimages_list,
+                 alllabel_list,
+                 testIndex,
+                 ttransforms=None):
+        super(testDataSet, self).__init__()
+        self.test_images_list = np.array(allimages_list)[testIndex]
+        self.test_label_list = np.array(alllabel_list)[testIndex]
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.test_label_list)
+
+    def __getitem__(self, index):
+        image = self.test_images_list[index]
+        label = self.test_label_list[index]
+        if self.transforms is not None:
+            image = self.transforms(image)
+        return image, label
+
 
 def costume_collate_fn(batch):
     img, label = zip(*batch)
     img = torch.Tensor(img)
     # img: bs, w, h, c
-    img = img.permute(0,3,1,2)
+    img = img.permute(0, 3, 1, 2)
     return img, label
 
 
@@ -179,52 +215,84 @@ def get_priorBox_2d():
     box_list = []
     for i in range(60):
         for j in range(10):
-            x = (j+0.5)*32
-            y = (i+0.5)*32
-            box = x,y
+            x = (j + 0.5) * 32
+            y = (i + 0.5) * 32
+            box = x, y
             box_list.append(box)
     priorBox_2d = torch.Tensor(box_list)
     return priorBox_2d
 
-if __name__ == "__main__":
-    dirPath = "./data/modified_jpgs/JPEGImages/"
-    trainDataSets = trainDataSet(dirPath)
-    # print(
-    #     type(trainDataSets[0]), isinstance(trainDataSets[0], torch.Tensor),
-    #     isinstance(trainDataSets[0], tuple)
-    #     , hasattr(trainDataSets[0], '_fields'))
-    train_dataloader = DataLoader(trainDataSets,
-                                  num_workers=1,
-                                  batch_size=3,
-                                  shuffle=False,
-                                  collate_fn=costume_collate_fn)
 
-    for image, label in train_dataloader:
-        print(image.shape, label, '\n')
+def draw_bbox_label(image, bbox_list, classid_list, line_width):
+    """
+    Arguments:
+        image {[cv2]} -- [cv2 读取得到图片]
+        bbox {[type]} -- [description]
+        label {[type]} -- [description]
+    """
+    num = len(bbox_list)
+    for i in range(num):
+        xmin, ymin, xmax, ymax = bbox_list[i]
+        className = cfg.id2className_dict[classid_list[i]]
+
+        color = [255, 0, 0]# [random.randint(0,255) for i in range(3)]
+        # if classid_list[i] == 0:
+        #     color = [255, 0, 0]
+        # else:
+        #     color = [0, 0, 255]
+        
+        leftTop = xmin-3, ymin-3
+        rightBottom = xmax+3, ymax+3
+        image = cv2.rectangle(image, leftTop, rightBottom, color, line_width)
+    return image
 
 
-    # for i in range(len(trainDataSets)):
-    #     image, bbox, classid = trainDataSets[i]
-    #     print(image.shape, bbox[0], classid)
+# if __name__ == "__main__":
+#     pass
+# dirPath = "./data/modified_jpgs/JPEGImages/"
+# trainDataSets = trainDataSet(dirPath)
 
-    # for i in range(10000):
-    #     print_string(str(i))
-    # images, bboxs, classids = get_all_samples(dirPath)
-    # print(images.shape,len(bboxs), len(classids))
-    # print(bboxs)
-    # print(classids)
+# print(
+#     type(trainDataSets[0]), isinstance(trainDataSets[0], torch.Tensor),
+#     isinstance(trainDataSets[0], tuple)
+#     , hasattr(trainDataSets[0], '_fields'))
 
-    # for i in os.listdir(dirPath):
-    #     imagePath = os.path.join(dirPath, i)
-    #     img, bbox, label = get_sample_image_bbox_classId(imagePath)
-    #     print(img.shape, len(bbox), len(label), bbox)
-    # print(get_filePath_list(dirPath))
-    # print(get_filePath_list2(dirPath))
+# train_dataloader = DataLoader(trainDataSets,
+#                               num_workers=1,
+#                               batch_size=3,
+#                               shuffle=False,
+#                               collate_fn=costume_collate_fn)
 
-    # img, bbox, label = get_all_samples(dirPath)
-    # for i in range(121):
-    #     print(img[i].shape, (bbox[i]), (label[i]))
+# for image, label in train_dataloader:
+#     print(image.shape, label, '\n')
 
-    # box_list = get_priorBox_2d()
-    # print(box_list.shape)
-    # print(box_list[:5])
+# for i in range(len(trainDataSets)):
+#     image, bbox, classid = trainDataSets[i]
+#     print(image.shape, bbox[0], classid)
+
+# for i in range(10000):
+#     print_string(str(i))
+# images, bboxs, classids = get_all_samples(dirPath)
+# print(images.shape,len(bboxs), len(classids))
+# print(bboxs)
+# print(classids)
+
+# for i in os.listdir(dirPath):
+#     imagePath = os.path.join(dirPath, i)
+#     img, bbox, label = get_sample_image_bbox_classId(imagePath)
+#     print(img.shape, len(bbox), len(label), bbox)
+# print(get_filePath_list(dirPath))
+# print(get_filePath_list2(dirPath))
+
+# img, bbox, label = get_all_samples(dirPath)
+# for i in range(121):
+#     print(img[i].shape, (bbox[i]), (label[i]))
+
+# box_list = get_priorBox_2d()
+# print(box_list.shape)
+# print(box_list[:5])
+
+# train_list = allimages_list[trainIndex_1dArray]
+# print(len(train_list))
+# for i in range(len(train_list)):
+#     print(len(train_list[i]))

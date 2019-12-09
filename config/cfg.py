@@ -2,11 +2,11 @@ import os
 
 SAVE_DIR = './weights'
 
-SAVE_NAME = "new.pth"
+SAVE_NAME = "net_"
 
 TOTAL_EPOCH = 60
 
-BATCH_SIZE = 2
+BATCH_SIZE = 20
 
 LEARNING_RATE = 3e-4
 
