@@ -139,7 +139,7 @@ class testDataSet(Dataset):
                  allimages_list,
                  alllabel_list,
                  testIndex,
-                 ttransforms=None):
+                 transforms=None):
         super(testDataSet, self).__init__()
         self.test_images_list = np.array(allimages_list)[testIndex]
         self.test_label_list = np.array(alllabel_list)[testIndex]

@@ -1,24 +1,28 @@
+import argparse
+import math
 import os
 import shutil
+
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-import math
-import numpy as np
 from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader
 
 from config import cfg
-from utils.utils import get_device
-from model.model import Net
 from dataloader import testIndex_1dArray, trainIndex_1dArray
-from utils.utils import trainDataSet, costume_collate_fn, get_priorBox_2d, print_flush
+from eval import evals
+from model.model import Net
+from predict import detect
 from utils.CostumeLoss import MultiBoxLoss
+from utils.utils import (costume_collate_fn, get_all_samples, get_device,
+                         get_filePath_list, get_priorBox_2d, print_flush,
+                         testDataSet, trainDataSet)
 from utils.visdom import Visualizer
-from utils.utils import get_filePath_list, get_all_samples
 
 
 def train(total_epoch, model, optimizer, scheduler, criterion,
-          trainDataLoader):
+          trainDataLoader, testDatasets):
 
     vis = Visualizer(env="detection")
 
@@ -57,11 +61,33 @@ def train(total_epoch, model, optimizer, scheduler, criterion,
                 model.state_dict(),
                 os.path.join(cfg.SAVE_DIR,
                              cfg.SAVE_NAME + str(epoch) + ".pth"))
+        # test
+        F1_score = test(testDatasets, model)
+        print_test_string = "Epoch:%d | F1-Score: %.5f" % (epoch, F1_score)
+        print(print_test_string)
+        vis.plot_many_stack({"f1 score": F1_score})
 
         scheduler.step()
 
 
+def test(testDatasets, model):
+    gt_label_list = []
+    p_label_list = []
+    for index in range(len(testDatasets)):
+        image, label = testDatasets[index]
+        gt_label_list.append(label)
+        # print(image.shape, '*' * 19)
+        p_label = detect(image, model)
+        p_label_list.append(p_label)
+    pf, f1 = evals(gt_label_list, p_label_list)
+    return f1
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser("weight path")
+    parser.add_argument('--weight_path', type=str, default="", help="weight path")
+    args = parser.parse_args()
+
     device = get_device()
 
     total_epoch = cfg.TOTAL_EPOCH
@@ -69,8 +95,11 @@ if __name__ == "__main__":
     dir_path = cfg.DIR_PATH
 
     model = Net()
-    model = model.to(device)
-
+    if args.weight_path is not "":
+        model.load_state_dict(torch.load(args.weight_path, map_location='cpu'))
+    if torch.cuda.is_available():
+        model = model.cuda()
+    
     num_of_train = len(trainIndex_1dArray)
 
     batch_size = cfg.BATCH_SIZE
@@ -91,18 +120,23 @@ if __name__ == "__main__":
                                                      milestones=milestone_list,
                                                      gamma=0.5)
 
-    trainDataSets = trainDataSet(dir_path,
+    trainDatasets = trainDataSet(dir_path,
                                  allimages_list,
                                  alllabel_list,
                                  trainIndex=trainIndex_1dArray)
-    trainDataLoader = DataLoader(trainDataSets,
+    trainDataLoader = DataLoader(trainDatasets,
                                  shuffle=False,
                                  collate_fn=costume_collate_fn,
                                  batch_size=cfg.BATCH_SIZE,
-                                 num_workers=4)
+                                 num_workers=8)
+    testDatasets = testDataSet(dir_path,
+                               allimages_list,
+                               alllabel_list,
+                               testIndex=testIndex_1dArray)
+
 
     priorBox_2d = get_priorBox_2d()
 
     criterion = MultiBoxLoss(priorBox_2d)
 
-    train(total_epoch, model, optimizer, scheduler, criterion, trainDataLoader)
+    train(total_epoch, model, optimizer, scheduler, criterion, trainDataLoader, testDatasets)
