@@ -8,7 +8,7 @@ TOTAL_EPOCH = 60
 
 BATCH_SIZE = 20
 
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 1e-3
 
 IMAGE_DIR_PATH = "./data/modified_jpgs/JPEGImages"
 
