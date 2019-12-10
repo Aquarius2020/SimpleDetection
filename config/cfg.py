@@ -4,11 +4,11 @@ SAVE_DIR = './weights'
 
 SAVE_NAME = "net_"
 
-TOTAL_EPOCH = 60
+TOTAL_EPOCH = 600
 
 BATCH_SIZE = 20
 
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 3e-4
 
 IMAGE_DIR_PATH = "./data/modified_jpgs/JPEGImages"
 
