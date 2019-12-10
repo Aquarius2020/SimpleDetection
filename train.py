@@ -10,24 +10,23 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
 from config import cfg
-from dataloader import testIndex_1dArray, trainIndex_1dArray
 from eval import evals
 from model.model import Net
 from predict import detect
 from utils.CostumeLoss import MultiBoxLoss
 from utils.utils import (costume_collate_fn, get_all_samples, get_device,
                          get_filePath_list, get_priorBox_2d, print_flush,
-                         testDataSet, trainDataSet)
+                         testDataSet, trainDataSet, set_seed)
 from utils.visdom import Visualizer
 
 
-def train(total_epoch, model, optimizer, scheduler, criterion,
-          trainDataLoader, testDatasets):
+def train(total_epoch, model, optimizer, scheduler, criterion, trainDataLoader,
+          testDatasets):
 
-    vis = Visualizer(env="detection")
+    vis = Visualizer(env="SimpleDetection")
 
-    model.train()
     for epoch in range(total_epoch):
+        model.train()
         for index, (batch_image, label_list) in enumerate(trainDataLoader):
             if torch.cuda.is_available():
                 batch_image = batch_image.cuda()
@@ -66,11 +65,12 @@ def train(total_epoch, model, optimizer, scheduler, criterion,
         print_test_string = "Epoch:%d | F1-Score: %.5f" % (epoch, F1_score)
         print(print_test_string)
         vis.plot_many_stack({"f1 score": F1_score})
-
+        vis.plot_many_stack({"learning rate": scheduler.get_lr()[0]})
         scheduler.step()
 
 
 def test(testDatasets, model):
+    model.eval()
     gt_label_list = []
     p_label_list = []
     for index in range(len(testDatasets)):
@@ -85,10 +85,15 @@ def test(testDatasets, model):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("weight path")
-    parser.add_argument('--weight_path', type=str, default="", help="weight path")
+    parser.add_argument('--weight_path',
+                        type=str,
+                        default="",
+                        help="weight path")
     args = parser.parse_args()
 
     device = get_device()
+
+    set_seed()
 
     total_epoch = cfg.TOTAL_EPOCH
 
@@ -99,7 +104,12 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(args.weight_path, map_location='cpu'))
     if torch.cuda.is_available():
         model = model.cuda()
-    
+
+    imageFilePath_list = get_filePath_list(cfg.IMAGE_DIR_PATH)
+    index_1dArray = np.arange(cfg.NUM_OF_IMAGES)
+    trainIndex_1dArray, testIndex_1dArray = train_test_split(index_1dArray,
+                                                             test_size=0.2)
+
     num_of_train = len(trainIndex_1dArray)
 
     batch_size = cfg.BATCH_SIZE
@@ -115,7 +125,7 @@ if __name__ == "__main__":
     ######################################################################
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.LEARNING_RATE)
-    milestone_list = [10 * k for k in range(1, total_epoch // 10)]
+    milestone_list = [10 * k for k in range(1, total_epoch // 5)]
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                      milestones=milestone_list,
                                                      gamma=0.5)
@@ -134,9 +144,9 @@ if __name__ == "__main__":
                                alllabel_list,
                                testIndex=testIndex_1dArray)
 
-
     priorBox_2d = get_priorBox_2d()
 
     criterion = MultiBoxLoss(priorBox_2d)
 
-    train(total_epoch, model, optimizer, scheduler, criterion, trainDataLoader, testDatasets)
+    train(total_epoch, model, optimizer, scheduler, criterion, trainDataLoader,
+          testDatasets)

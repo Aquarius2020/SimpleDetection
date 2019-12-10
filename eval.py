@@ -7,7 +7,6 @@ import numpy as np
 from torch.utils.data import DataLoader
 import pandas as pd
 
-from dataloader import testIndex_1dArray
 from utils.utils import get_filePath_list, get_sample_image_bbox_classId, get_priorBox_2d
 from utils.utils import trainDataSet, costume_collate_fn, get_device, get_all_samples
 from config import cfg
@@ -104,6 +103,7 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(args.weight_path, map_location='cpu'))
     if torch.cuda.is_available():
         model = model.cuda()
+    model.eval()
 
     ######################################################################
     imageFilePath_list = get_filePath_list(cfg.IMAGE_DIR_PATH)

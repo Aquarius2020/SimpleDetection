@@ -14,7 +14,7 @@ class MultiBoxLoss(nn.Module):
         num_label = len(label_list)
         num_prior = len(self.priorBox_2d)
 
-        gt_offset_3d = torch.Tensor(num_label, num_prior, 2)
+        gt_offset_3d = torch.zeros(num_label, num_prior, 2)
         gt_classid_2d = torch.zeros(num_label, num_prior).long()
 
         for index, label in enumerate(label_list):
@@ -64,10 +64,14 @@ class MultiBoxLoss(nn.Module):
         num_negtive = 2
         # p_confidence_3d: bs, w*h, num_classes
         afterSoftmaxConfidence_3d = F.softmax(p_confidence_3d, dim=2)
-        negtiveConfidence_2d = afterSoftmaxConfidence_3d[
-            ..., 0]  # do not understand
+        # negtiveConfidence_2d ： [bs, w*h, classid=0]
+        negtiveConfidence_2d = afterSoftmaxConfidence_3d[..., 0]  # class = background
+        # 先按照w*h这一部分进行排序
+        # negtiveConfidence_2d: [bs, w*h]
         index_2d = negtiveConfidence_2d.sort(1)[1]
+        # index_2d shape：[bs, w*h]
         rank_2d = index_2d.sort(1)[1]
+        # https://blog.csdn.net/LXX516/article/details/78804884
 
         negtive_2d = rank_2d < num_negtive
         isSelected_2d = positive_2d + negtive_2d

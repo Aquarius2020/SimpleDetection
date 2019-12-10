@@ -18,6 +18,8 @@ def detect(image_3dArray, model):
     with torch.no_grad():
         if torch.cuda.is_available():
             x = torch.ByteTensor(image_4dArray).cuda()
+        else:
+            x = torch.ByteTensor(image_4dArray)
         x = x.permute(0, 3, 1, 2).float()
         # bs, w*h, 2+num_of_classes
         prediction_3d = model(x)
@@ -68,9 +70,12 @@ if __name__ == "__main__":
     args = paser.parse_args()
 
     device = get_device()
-    model = Net().to(device)
+    model = Net()
     if args.weight_path is not "":
         model.load_state_dict(torch.load(args.weight_path, map_location='cpu'))
+    if torch.cuda.is_available():
+        model = model.cuda()
+    model.eval()
 
     for item in os.listdir(args.image_dir):
         if item.endswith('jpg'):
