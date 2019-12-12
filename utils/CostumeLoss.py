@@ -21,6 +21,8 @@ class MultiBoxLoss(nn.Module):
             box_list, classid_list = label
             # print(classid_list, '='*5)
             for box, classid in zip(box_list, classid_list):
+                if classid == 2:
+                    print(classid,'='*10)
                 # ground truth
                 xmin, ymin, xmax, ymax = box
                 center_x = (xmin + xmax) // 2
@@ -78,7 +80,10 @@ class MultiBoxLoss(nn.Module):
 
         p_confidence_2d = p_confidence_3d[isSelected_2d]
         gt_classid_1d = gt_classid_2d[isSelected_2d]
-        # print(isSelected_2d ,p_confidence_2d, '\n', gt_classid_1d)
+
+        print(p_confidence_2d, '\n', (gt_classid_1d>0).sum())
+        # input: p_confidence_2d [bs, 3]
+        # target: gt_classid_1d [bs]
         confidence_loss = self.confidenceLoss(p_confidence_2d, gt_classid_1d)
 
         return location_loss, confidence_loss

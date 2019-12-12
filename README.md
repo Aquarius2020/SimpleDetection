@@ -1,2 +1,3 @@
 # SimpleDetection
 
+![](./figures/demo.jpg)
